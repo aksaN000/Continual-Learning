@@ -1,0 +1,44 @@
+The original paper I referenced (Kirkpatrick et al., 2017) primarily focuses on Elastic Weight Consolidation (EWC) as a technique to overcome catastrophic forgetting. The other major technique you implemented in your project - Experience Replay - comes from different papers. Let me provide you with the complete references for all the techniques used in your implementation:
+1. For Elastic Weight Consolidation (EWC)
+Paper: "Overcoming catastrophic forgetting in neural networks"
+Authors: James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, et al.
+Publication: Proceedings of the National Academy of Sciences (PNAS)
+Year: 2017
+DOI: 10.1073/pnas.1611835114
+
+2. For Experience Replay
+Paper: "Gradient Episodic Memory for Continual Learning"
+Authors: David Lopez-Paz, Marc'Aurelio Ranzato
+Publication: Advances in Neural Information Processing Systems (NeurIPS)
+Year: 2017
+URL: https://proceedings.neurips.cc/paper/2017/hash/f87522788a2be2d171666752f97ddebb-Abstract.html
+Citation:
+Lopez-Paz, D., & Ranzato, M. (2017). Gradient episodic memory for continual learning. Advances in Neural Information Processing Systems, 30.
+
+3. For Text Command Understanding Using Transformer Models
+Paper: "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"
+Authors: Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova
+Publication: Proceedings of NAACL-HLT
+Year: 2019
+URL: https://aclanthology.org/N19-1423/
+Citation:
+Devlin, J., Chang, M. W., Lee, K., & Toutanova, K. (2019). BERT: Pre-training of deep bidirectional transformers for language understanding. In Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers) (pp. 4171-4186).
+
+4. For Combined Approaches in Continual Learning
+Paper: "Continuous learning in single-incremental-task scenarios"
+Authors: Davide Maltoni, Vincenzo Lomonaco
+Publication: Neural Networks
+Year: 2019
+DOI: 10.1016/j.neunet.2019.03.010
+Citation:
+Maltoni, D., & Lomonaco, V. (2019). Continuous learning in single-incremental-task scenarios. Neural Networks, 116, 56-73.
+
+5. For Evaluation Metrics in Continual Learning
+Paper: "Measuring Catastrophic Forgetting in Neural Networks"
+Authors: Ronald Kemker, Marc McClure, Angelina Abitino, Tyler Hayes, Christopher Kanan
+Publication: Thirty-Second AAAI Conference on Artificial Intelligence
+Year: 2018
+URL: https://ojs.aaai.org/index.php/AAAI/article/view/11651
+Citation:
+Kemker, R., McClure, M., Abitino, A., Hayes, T. L., & Kanan, C. (2018). Measuring catastrophic forgetting in neural networks. In Thirty-second AAAI conference on artificial intelligence.
+These papers collectively provide the theoretical foundation for the continual learning approach implemented in your project. While your implementation primarily focuses on EWC and Experience Replay, the evaluation metrics and experimental framework draw from the broader literature on continual learning.
