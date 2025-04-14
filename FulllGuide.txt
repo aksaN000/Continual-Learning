@@ -1,0 +1,334 @@
+# Complete Guide: Continual Learning for Text Command Understanding
+
+This guide provides step-by-step instructions for implementing, running, and evaluating the continual learning project for sequential text command understanding.
+
+## 1. Project Setup
+
+### Clone the repository and set up the environment
+
+```powershell
+# Create and navigate to the project directory
+mkdir continual_learning_project
+cd continual_learning_project
+
+# Create the directory structure
+mkdir -p data/processed
+mkdir -p models
+mkdir -p training
+mkdir -p experiments/configs
+mkdir -p visualization
+mkdir -p results
+
+# Create virtual environment
+python -m venv cl_env
+.\cl_env\Scripts\Activate.ps1
+
+# Create requirements.txt
+```
+
+Create a `requirements.txt` file with the following content:
+
+```
+torch>=1.10.0
+torchvision>=0.11.0
+transformers>=4.18.0
+datasets>=2.0.0
+matplotlib>=3.5.1
+pandas>=1.3.5
+scikit-learn>=1.0.2
+tqdm>=4.62.3
+requests>=2.25.0
+```
+
+```powershell
+# Install dependencies
+pip install -r requirements.txt
+```
+
+## 2. Data Module Implementation
+
+### Create data utilities
+
+Create `data/download_data.py` and `data/data_utils.py` files with the provided implementations.
+
+```powershell
+# Download and process the HWU64 dataset
+python data/download_data.py
+```
+
+### Verify the data
+
+```powershell
+# Check if domain folders were created
+dir data\processed
+
+# Check if domains.txt exists
+type data\processed\domains.txt
+```
+
+## 3. Model Implementation
+
+### Implement the base model and continual learning wrapper
+
+Create the following files:
+- `models/__init__.py`
+- `models/base_model.py`
+- `models/continual_learner.py`
+
+## 4. Training Components Implementation
+
+### Implement replay buffer, metrics tracking, and training loops
+
+Create the following files:
+- `training/__init__.py`
+- `training/replay_buffer.py`
+- `training/metrics.py`
+- `training/train.py`
+
+## 5. Experiment Module Implementation
+
+### Create experiment configuration and runner
+
+Create the following files:
+- `experiments/__init__.py`
+- `experiments/configs/default_config.py`
+- `experiments/run_experiment.py`
+
+## 6. Visualization Module Implementation
+
+### Implement visualization utilities
+
+Create the following files:
+- `visualization/__init__.py`
+- `visualization/plot_results.py`
+
+## 7. Main Script Implementation
+
+### Create the main entry point
+
+Create `main.py` to serve as the entry point for all commands.
+
+## 8. Running Experiments
+
+### Basic experiment with EWC and replay
+
+```powershell
+python main.py run-experiment --name baseline_full --use_ewc --use_replay --epochs 3
+```
+
+### Experiment with only experience replay (no EWC)
+
+```powershell
+python main.py run-experiment --name replay_only --no_ewc --use_replay --epochs 3
+```
+
+### Experiment with only EWC regularization (no replay)
+
+```powershell
+python main.py run-experiment --name ewc_only --use_ewc --no_replay --epochs 3
+```
+
+### Baseline experiment with no continual learning
+
+```powershell
+python main.py run-experiment --name baseline_naive --no_ewc --no_replay --epochs 3
+```
+
+## 9. Visualizing Results
+
+### Visualize a single experiment
+
+```powershell
+# Replace with your actual experiment path
+python main.py visualize --results results/baseline_full_YYYYMMDD_HHMMSS/results.json
+```
+
+### Compare multiple experiments
+
+```powershell
+python main.py compare --results_dir results/
+```
+
+## 10. Running Batch Experiments
+
+### Run multiple configurations in a batch
+
+```powershell
+python main.py batch --ewc_values 0 1 5 --replay_sizes 0 100 500
+```
+
+## 11. Analyzing Metrics
+
+### Understanding the metrics
+
+1. **Accuracy**: The percentage of correctly classified examples for each domain.
+   - Higher is better
+   - Look for how it changes as you train on more domains
+
+2. **Forgetting**: The decrease in accuracy for a domain after training on subsequent domains.
+   - Lower is better
+   - Calculated as: max(previous accuracy) - current accuracy
+
+3. **Backward Transfer**: How learning new domains affects performance on previous domains.
+   - Positive values indicate beneficial transfer
+   - Negative values indicate interference
+
+### Example analysis workflow
+
+1. Run experiments with different configurations
+```powershell
+python main.py run-experiment --name baseline_naive --no_ewc --no_replay
+python main.py run-experiment --name ewc_only --use_ewc --no_replay
+python main.py run-experiment --name replay_only --no_ewc --use_replay
+python main.py run-experiment --name combined --use_ewc --use_replay
+```
+
+2. Compare results
+```powershell
+python main.py compare --results_dir results/
+```
+
+3. Examine individual results for more detail
+```powershell
+python main.py visualize --results results/combined_YYYYMMDD_HHMMSS/results.json
+```
+
+## 12. Evaluating Different Buffer Sizes
+
+### Test impact of replay buffer size
+
+```powershell
+python main.py run-experiment --name replay_small --no_ewc --use_replay --replay_buffer_size 100
+python main.py run-experiment --name replay_medium --no_ewc --use_replay --replay_buffer_size 500
+python main.py run-experiment --name replay_large --no_ewc --use_replay --replay_buffer_size 1000
+```
+
+## 13. Evaluating Different EWC Strengths
+
+### Test impact of EWC regularization strength
+
+```powershell
+python main.py run-experiment --name ewc_weak --use_ewc --no_replay --ewc_lambda 0.1
+python main.py run-experiment --name ewc_medium --use_ewc --no_replay --ewc_lambda 1.0
+python main.py run-experiment --name ewc_strong --use_ewc --no_replay --ewc_lambda 10.0
+```
+
+## 14. Finding Optimal Combinations
+
+### Comprehensive batch experiment
+
+```powershell
+python main.py batch --ewc_values 0 0.1 1 10 --replay_sizes 0 100 500 1000
+```
+
+This will run 16 different combinations and generate comparison visualizations.
+
+## 15. Presentation Workflow
+
+For presenting this project, follow these steps:
+
+1. **Setup demonstration**:
+   ```powershell
+   python data/download_data.py
+   ```
+
+2. **Show catastrophic forgetting**:
+   ```powershell
+   python main.py run-experiment --name baseline_naive --no_ewc --no_replay --epochs 2
+   python main.py visualize --results results/baseline_naive_YYYYMMDD_HHMMSS/results.json
+   ```
+
+3. **Show improvement with EWC**:
+   ```powershell
+   python main.py run-experiment --name ewc_only --use_ewc --no_replay --epochs 2
+   python main.py visualize --results results/ewc_only_YYYYMMDD_HHMMSS/results.json
+   ```
+
+4. **Show improvement with replay**:
+   ```powershell
+   python main.py run-experiment --name replay_only --no_ewc --use_replay --epochs 2
+   python main.py visualize --results results/replay_only_YYYYMMDD_HHMMSS/results.json
+   ```
+
+5. **Show combined approach**:
+   ```powershell
+   python main.py run-experiment --name combined --use_ewc --use_replay --epochs 2
+   python main.py visualize --results results/combined_YYYYMMDD_HHMMSS/results.json
+   ```
+
+6. **Compare all approaches**:
+   ```powershell
+   python main.py compare --results_dir results/
+   ```
+
+7. **Show detailed analysis of best approach**:
+   ```powershell
+   # Assuming 'combined' was the best approach
+   python main.py visualize --results results/combined_YYYYMMDD_HHMMSS/results.json --output_dir presentation_figures
+   ```
+
+## 16. Troubleshooting
+
+### Common issues and solutions
+
+1. **No domains found in dataset**:
+   - Check the data directory structure: `dir data\processed`
+   - Verify domains.txt exists: `type data\processed\domains.txt`
+   - If needed, re-run data processing: `python data/download_data.py`
+
+2. **Empty visualization plots**:
+   - Verify the experiment completed successfully
+   - Check the results.json file: `type results\experiment_name_YYYYMMDD_HHMMSS\results.json`
+   - Ensure domains, accuracies, and other metrics are correctly populated
+
+3. **CUDA out of memory**:
+   - Reduce batch size in config: `--batch_size 8`
+   - Run on CPU if needed: Set device to "cpu" in run_experiment.py
+
+4. **Package not found errors**:
+   - Ensure virtual environment is activated: `.\cl_env\Scripts\Activate.ps1`
+   - Install missing packages: `pip install package_name`
+
+## 17. Next Steps for Extension
+
+To extend this project further, consider:
+
+1. **Implementing more continual learning techniques**:
+   - Generative replay
+   - Progressive neural networks
+   - Dynamic architecture expansion
+
+2. **Testing different base models**:
+   - RoBERTa
+   - DistilBERT
+   - ALBERT
+
+3. **Adding dynamic memory management**:
+   - Importance-based example selection
+   - Diversity-based example selection
+   - Forgetting-based example selection
+
+4. **Expanding to more domains**:
+   - Process all available domains
+   - Create more challenging domain sequences
+
+## 18. Project Evaluation
+
+To evaluate your implementation, compare:
+
+1. **Baseline (no continual learning)**:
+   - Should show significant forgetting
+
+2. **EWC only**:
+   - Should show less forgetting than baseline
+   - May have lower overall accuracy than replay
+
+3. **Replay only**:
+   - Should show less forgetting than baseline
+   - Effectiveness should increase with larger buffer sizes
+
+4. **Combined approach**:
+   - Should show the least forgetting
+   - Should achieve highest overall accuracy
+
+Expected results: Combined approach > Replay only > EWC only > Baseline
