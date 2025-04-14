@@ -7,21 +7,30 @@ __pycache__/
 venv/
 env/
 
-# ML/Data
+# Machine Learning
 *.h5
 *.pkl
 *.pt
 results/
+logs/
+
+# Large Data Directories
 data/raw/
 data/processed/
+*.csv
+*.json
+
+# Jupyter
+.ipynb_checkpoints/
 
 # IDE
 .vscode/
 .idea/
 
-# Logs
+# Logs and Databases
 *.log
+*.sqlite
 
-# OS
+# OS generated files
 .DS_Store
 Thumbs.db
