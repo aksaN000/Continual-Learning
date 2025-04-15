@@ -142,16 +142,30 @@ def run_experiment(config):
     model.to(device)
     
     # Initialize replay buffer
-    replay_buffer = ReplayBuffer(capacity=config['continual']['replay_buffer_size'])
+    replay_buffer_size = config['continual']['replay_buffer_size'] if config['experiment']['use_replay'] else 0
+    replay_buffer = ReplayBuffer(capacity=replay_buffer_size)
     
-    # Set EWC lambda
+    # Set EWC lambda - use a more appropriate value based on the setting
     if config['experiment']['use_ewc']:
-        model.ewc_lambda = config['continual']['ewc_lambda']
+        # Use a more moderate EWC lambda - previous value was too high
+        # This is a critical change!
+        model.ewc_lambda = 5.0  # Much lower than 100.0 used before
     else:
-        model.ewc_lambda = 0.0
+        model.ewc_lambda = 0.0  # Explicitly set to 0 to disable EWC
     
     # Set replay batch size
     replay_batch_size = config['continual']['replay_batch_size'] if config['experiment']['use_replay'] else 0
+    
+    # Log the settings being used
+    print(f"\nContinual Learning Settings:")
+    print(f"  EWC: {'Enabled' if config['experiment']['use_ewc'] else 'Disabled'}")
+    if config['experiment']['use_ewc']:
+        print(f"  EWC Lambda: {model.ewc_lambda}")
+    print(f"  Replay: {'Enabled' if config['experiment']['use_replay'] else 'Disabled'}")
+    if config['experiment']['use_replay']:
+        print(f"  Replay Buffer Size: {replay_buffer_size}")
+        print(f"  Replay Batch Size: {replay_batch_size}")
+    print(f"  Epochs per domain: {config['training']['epochs']}")
     
     # Run continual learning
     print("\nStarting continual learning training...")

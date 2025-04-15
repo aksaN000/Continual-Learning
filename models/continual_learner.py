@@ -49,7 +49,8 @@ class ContinualTextCommandLearner(nn.Module):
         where F_i is the importance of parameter i,
         θ_i is the current value, and θ*_i is the old value.
         """
-        if self.ewc_lambda == 0 or not self.importance or not self.old_params:
+        # If EWC is disabled or not initialized yet, return 0
+        if self.ewc_lambda <= 0 or not self.importance or not self.old_params:
             return 0
         
         ewc_loss = 0
@@ -69,6 +70,11 @@ class ContinualTextCommandLearner(nn.Module):
         Update EWC parameters based on current domain data.
         Calculate Fisher Information Matrix as the importance.
         """
+        # Skip if EWC is disabled
+        if self.ewc_lambda <= 0:
+            print("EWC is disabled, skipping parameter update.")
+            return
+            
         print("Updating EWC parameters with proper Fisher calculation...")
         
         # Store current parameters before moving to next domain
@@ -133,9 +139,6 @@ class ContinualTextCommandLearner(nn.Module):
         if sample_count > 0:
             for name in self.importance:
                 self.importance[name] /= sample_count
-        
-        # Set EWC lambda to 100 (stronger regularization)
-        self.ewc_lambda = 100.0
         
         # Print statistics about importance values
         print("Fisher Information statistics:")

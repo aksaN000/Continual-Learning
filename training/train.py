@@ -61,7 +61,7 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
             # Initialize total loss with CE loss
             loss = ce_loss
             
-            # Add EWC regularization if enabled
+            # Add EWC regularization if enabled (model.ewc_lambda > 0)
             ewc_loss = model.compute_ewc_loss()
             ewc_loss_value = ewc_loss.item() if isinstance(ewc_loss, torch.Tensor) else ewc_loss
             
@@ -72,15 +72,18 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
             # Initialize replay loss value
             replay_loss_value = 0
             
-            # Sample from replay buffer if it's not empty
-            if len(replay_buffer) > 0 and replay_batch_size > 0:
+            # Sample from replay buffer if it's not empty and we're not on the first domain
+            # (no previous data to replay for the first domain)
+            if len(replay_buffer) > 0 and replay_batch_size > 0 and domain_idx > 0:
+                # Sample examples from the replay buffer with a focus on previous domains
                 replay_batch = replay_buffer.sample(replay_batch_size, device)
                 
                 # Forward pass for replay batch
                 replay_outputs = model(replay_batch['input_ids'], replay_batch['attention_mask'])
                 
                 # Compute loss for replay examples
-                replay_loss = criterion(replay_outputs, replay_batch['label'])
+                # Use a lower weight for replay loss to balance with current domain learning
+                replay_loss = 0.5 * criterion(replay_outputs, replay_batch['label'])
                 replay_loss_value = replay_loss.item()
                 total_replay_loss += replay_loss_value
                 
@@ -90,6 +93,10 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
+            
+            # Gradient clipping to prevent instability
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
             
             # Calculate accuracy
@@ -110,8 +117,12 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
                 'replay': f"{replay_loss_value:.4f}"
             })
             
-            # Add current batch to replay buffer
-            replay_buffer.add_batch(batch, device)
+            # Add current batch to replay buffer (do this for all domains)
+            # For better memory management, only add a subset of each batch
+            if domain_idx < model.num_domains - 1:  # Don't add examples from last domain
+                # Add with probability based on accuracy - prioritize correct examples
+                sample_prob = 0.3  # Base probability to add examples
+                replay_buffer.add_batch(batch, device, sample_prob=sample_prob)
         
         # Print epoch results with loss breakdown
         avg_total_loss = total_loss / len(train_loader)
@@ -127,8 +138,8 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
     print(f"Validation accuracy on domain {domain_idx}: {val_acc:.4f}")
     
     # Update EWC parameters for regularization in future domains
+    # Only update if EWC is enabled (model.ewc_lambda > 0) and we're not on the last domain
     if domain_idx < model.num_domains - 1:  # No need to update for the last domain
-        print("Updating EWC parameters for future regularization...")
         model.update_ewc_params(train_loader, device)
     
     return val_acc

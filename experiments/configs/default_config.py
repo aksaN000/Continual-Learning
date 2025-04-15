@@ -1,5 +1,5 @@
 """
-Default configuration for continual learning experiments.
+Improved configuration for continual learning experiments.
 """
 
 config = {
@@ -19,20 +19,20 @@ config = {
     # Training settings
     'training': {
         'epochs': 3,
-        'learning_rate': 5e-5,
+        'learning_rate': 2e-5,  # Slightly lower learning rate
         'weight_decay': 0.01,
     },
     
     # Continual learning settings
     'continual': {
-        'replay_buffer_size': 1000,  # Store more examples
-        'replay_batch_size': 16,     # Use more examples per batch
-        'ewc_lambda': 100.0,         # Much stronger regularization
+        'replay_buffer_size': 500,  # More reasonable buffer size
+        'replay_batch_size': 8,     # Smaller batch size to maintain balance
+        'ewc_lambda': 5.0,          # Much lower regularization strength
     },
     
     # Experiment settings
     'experiment': {
-        'name': 'default',
+        'name': 'improved_config',
         'seed': 42,
         'use_ewc': True,
         'use_replay': True,
