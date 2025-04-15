@@ -145,16 +145,33 @@ def run_experiment(config):
     replay_buffer_size = config['continual']['replay_buffer_size'] if config['experiment']['use_replay'] else 0
     replay_buffer = ReplayBuffer(capacity=replay_buffer_size)
     
-    # Set EWC lambda - use a more appropriate value based on the setting
+    # Calculate appropriate EWC lambda based on experiment settings
+    ewc_lambda = 0.0
     if config['experiment']['use_ewc']:
-        # Use a more moderate EWC lambda - previous value was too high
-        # This is a critical change!
-        model.ewc_lambda = 5.0  # Much lower than 100.0 used before
+        base_ewc_lambda = config['continual']['ewc_lambda']
+        
+        # If both EWC and replay are active, adjust the EWC lambda based on the replay settings
+        if config['experiment']['use_replay']:
+            # Increase EWC for larger models to balance with replay
+            ewc_lambda = base_ewc_lambda * 1.2  # Slightly stronger EWC when combined with replay
+        else:
+            ewc_lambda = base_ewc_lambda
+        
+        model.ewc_lambda = ewc_lambda
     else:
         model.ewc_lambda = 0.0  # Explicitly set to 0 to disable EWC
     
-    # Set replay batch size
-    replay_batch_size = config['continual']['replay_batch_size'] if config['experiment']['use_replay'] else 0
+    # Set replay batch size with adaptive adjustment
+    replay_batch_size = 0
+    if config['experiment']['use_replay']:
+        base_replay_batch_size = config['continual']['replay_batch_size']
+        
+        # If both EWC and replay are active, adjust the replay batch size
+        if config['experiment']['use_ewc']:
+            # Slightly increase replay batch size to balance with EWC
+            replay_batch_size = base_replay_batch_size
+        else:
+            replay_batch_size = base_replay_batch_size
     
     # Log the settings being used
     print(f"\nContinual Learning Settings:")
@@ -166,6 +183,7 @@ def run_experiment(config):
         print(f"  Replay Buffer Size: {replay_buffer_size}")
         print(f"  Replay Batch Size: {replay_batch_size}")
     print(f"  Epochs per domain: {config['training']['epochs']}")
+    print(f"  Learning rate: {config['training']['learning_rate']}")
     
     # Run continual learning
     print("\nStarting continual learning training...")

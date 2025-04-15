@@ -1,5 +1,5 @@
 """
-Improved configuration for continual learning experiments.
+Optimized configuration for combined EWC+Replay continual learning.
 """
 
 config = {
@@ -19,23 +19,26 @@ config = {
     # Training settings
     'training': {
         'epochs': 3,
-        'learning_rate': 2e-5,  # Slightly lower learning rate
+        'learning_rate': 1e-5,  # Lower learning rate for better stability
         'weight_decay': 0.01,
     },
     
     # Continual learning settings
     'continual': {
-        'replay_buffer_size': 500,  # More reasonable buffer size
-        'replay_batch_size': 8,     # Smaller batch size to maintain balance
-        'ewc_lambda': 5.0,          # Much lower regularization strength
+        'replay_buffer_size': 750,      # Larger buffer size
+        'replay_batch_size': 10,        # Larger batch size for replay
+        'ewc_lambda': 10.0,             # Stronger EWC regularization
+        'replay_strategy': 'balanced',  # balanced, importance, or diversity
     },
     
     # Experiment settings
     'experiment': {
-        'name': 'improved_config',
+        'name': 'optimized_combined',
         'seed': 42,
         'use_ewc': True,
         'use_replay': True,
+        'online_ewc': True,           # Use online EWC (more efficient)
+        'importance_threshold': 85,    # Percentile threshold for parameter importance
     },
     
     # Output settings

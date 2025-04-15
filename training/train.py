@@ -3,15 +3,16 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 import numpy as np
-
+import random
 from training.replay_buffer import ReplayBuffer
 from training.metrics import ContinualMetrics
 
 def train_on_domain(model, domain_idx, train_loader, val_loader, 
                    replay_buffer, device, epochs=3, 
-                   replay_batch_size=8, learning_rate=5e-5):
+                   replay_batch_size=8, learning_rate=5e-5, 
+                   online_ewc=False):
     """
-    Train the model on a specific domain with experience replay.
+    Train the model on a specific domain with experience replay and EWC.
     
     Args:
         model: ContinualTextCommandLearner model
@@ -23,12 +24,22 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
         epochs: Number of epochs to train
         replay_batch_size: Batch size for replay samples
         learning_rate: Learning rate for optimizer
+        online_ewc: Whether to use online EWC (more efficient)
         
     Returns:
         val_acc: Validation accuracy on this domain
     """
-    # Set up optimizer
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
+    # Set up optimizer with cosine learning rate schedule
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
+    
+    # Learning rate scheduler
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, 
+        T_max=epochs * len(train_loader), 
+        eta_min=learning_rate * 0.1
+    )
+    
+    # Loss function
     criterion = nn.CrossEntropyLoss()
     
     # Training loop
@@ -42,11 +53,14 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
         total = 0
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
-        for batch in progress_bar:
+        for batch_idx, batch in enumerate(progress_bar):
             # Move batch to device
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['label'].to(device)
+            
+            # Get current learning rate for adaptive weighting
+            current_lr = scheduler.get_last_lr()[0]
             
             # Forward pass
             outputs = model(input_ids, attention_mask)
@@ -61,34 +75,49 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
             # Initialize total loss with CE loss
             loss = ce_loss
             
-            # Add EWC regularization if enabled (model.ewc_lambda > 0)
+            # Dynamic balancing based on domain index and learning rate
+            # As we learn more domains and reduce learning rate, we rely more on regularization
+            ewc_weight = 1.0
+            replay_weight = 1.0
+            
+            # More sophisticated dynamic weighting
+            if model.ewc_lambda > 0 and replay_batch_size > 0 and domain_idx > 0:
+                # Scale the weights with domain index and learning rate
+                # Earlier domains get stronger regularization
+                ewc_scale = 1.0 + 0.2 * domain_idx + (learning_rate / current_lr - 1.0)
+                ewc_weight = min(2.0, ewc_scale)
+                
+                # Replay weight scales similarly but with different parameters
+                replay_scale = 1.0 + 0.1 * domain_idx + (learning_rate / current_lr - 1.0)
+                replay_weight = min(1.5, replay_scale)
+            
+            # Add EWC regularization if enabled
             ewc_loss = model.compute_ewc_loss()
             ewc_loss_value = ewc_loss.item() if isinstance(ewc_loss, torch.Tensor) else ewc_loss
             
             if ewc_loss_value > 0:
-                loss += ewc_loss
+                loss += ewc_weight * ewc_loss
                 total_ewc_loss += ewc_loss_value
             
             # Initialize replay loss value
             replay_loss_value = 0
             
             # Sample from replay buffer if it's not empty and we're not on the first domain
-            # (no previous data to replay for the first domain)
             if len(replay_buffer) > 0 and replay_batch_size > 0 and domain_idx > 0:
-                # Sample examples from the replay buffer with a focus on previous domains
+                # Sample balanced examples from the replay buffer
                 replay_batch = replay_buffer.sample(replay_batch_size, device)
                 
-                # Forward pass for replay batch
-                replay_outputs = model(replay_batch['input_ids'], replay_batch['attention_mask'])
-                
-                # Compute loss for replay examples
-                # Use a lower weight for replay loss to balance with current domain learning
-                replay_loss = 0.5 * criterion(replay_outputs, replay_batch['label'])
-                replay_loss_value = replay_loss.item()
-                total_replay_loss += replay_loss_value
-                
-                # Add replay loss to total loss
-                loss += replay_loss
+                if replay_batch is not None:
+                    # Forward pass for replay batch
+                    replay_outputs = model(replay_batch['input_ids'], replay_batch['attention_mask'])
+                    
+                    # Compute regular loss for replay examples
+                    replay_loss = replay_weight * criterion(replay_outputs, replay_batch['label'])
+                    replay_loss_value = replay_loss.item()
+                    total_replay_loss += replay_loss_value
+                    
+                    # Add replay loss to total loss
+                    loss += replay_loss
             
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -98,6 +127,7 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             
             optimizer.step()
+            scheduler.step()
             
             # Calculate accuracy
             _, predicted = torch.max(domain_logits, 1)
@@ -106,7 +136,7 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
             
             # Update progress bar
             total_loss += loss.item()
-            avg_loss = total_loss / (progress_bar.n + 1)
+            avg_loss = total_loss / (batch_idx + 1)
             train_acc = 100 * correct / total
             
             # Update progress bar with detailed loss breakdown
@@ -114,15 +144,44 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
                 'loss': f"{avg_loss:.4f}",
                 'acc': f"{train_acc:.2f}%",
                 'ewc': f"{ewc_loss_value:.4f}",
-                'replay': f"{replay_loss_value:.4f}"
+                'replay': f"{replay_loss_value:.4f}",
+                'lr': f"{current_lr:.2e}"
             })
             
-            # Add current batch to replay buffer (do this for all domains)
-            # For better memory management, only add a subset of each batch
-            if domain_idx < model.num_domains - 1:  # Don't add examples from last domain
-                # Add with probability based on accuracy - prioritize correct examples
-                sample_prob = 0.3  # Base probability to add examples
-                replay_buffer.add_batch(batch, device, sample_prob=sample_prob)
+            # Add current batch to replay buffer
+            # Only add examples from domains other than the last one
+            if domain_idx < model.num_domains - 1:
+                # Determine which predictions were correct
+                preds_correct = (predicted == labels)
+                
+                # Higher probability for correctly classified examples from early domains
+                base_prob = 0.4 - 0.05 * domain_idx  # Decay with domain index
+                
+                # Adjust probability based on whether the prediction was correct
+                # For examples the model got right, higher probability of keeping
+                for i in range(len(preds_correct)):
+                    if preds_correct[i]:
+                        # If prediction was correct, use higher probability
+                        adjusted_prob = min(1.0, base_prob * 1.5)
+                    else:
+                        # If prediction was wrong, use lower probability
+                        adjusted_prob = base_prob * 0.5
+                        
+                    # Add this example to buffer with adjusted probability
+                    if random.random() < adjusted_prob:
+                        input_id = batch['input_ids'][i]
+                        attn_mask = batch['attention_mask'][i]
+                        label = batch['label'][i]
+                        
+                        # Move to CPU if needed
+                        if device is not None:
+                            input_id = input_id.to('cpu')
+                            attn_mask = attn_mask.to('cpu')
+                            label = label.to('cpu')
+                            
+                        # Add to replay buffer with importance based on correctness
+                        importance = 1.5 if preds_correct[i] else 1.0
+                        replay_buffer.add_example(input_id, attn_mask, label, domain_idx, importance)
         
         # Print epoch results with loss breakdown
         avg_total_loss = total_loss / len(train_loader)
@@ -138,9 +197,13 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
     print(f"Validation accuracy on domain {domain_idx}: {val_acc:.4f}")
     
     # Update EWC parameters for regularization in future domains
-    # Only update if EWC is enabled (model.ewc_lambda > 0) and we're not on the last domain
     if domain_idx < model.num_domains - 1:  # No need to update for the last domain
-        model.update_ewc_params(train_loader, device)
+        # Pass domain index for online EWC
+        model.update_ewc_params(train_loader, device, domain_idx=domain_idx)
+        
+        # For online EWC, consolidate importance after updating
+        if online_ewc and hasattr(model, 'consolidate_ewc_online') and domain_idx > 0:
+            model.consolidate_ewc_online()
     
     return val_acc
 
@@ -209,11 +272,6 @@ def evaluate_all_domains(model, domain_loaders, device, metrics=None):
             
             # Update metrics if provided
             if metrics is not None:
-                # For simplicity, we're not calculating true and pred here
-                # In a real implementation, you would collect these during evaluation
-                # For now, we'll just pass the accuracy directly
-                y_true = np.zeros(1)  # Placeholder
-                y_pred = np.zeros(1)  # Placeholder
                 metrics.domain_accs[domain_idx].append(acc)
     
     # Calculate average accuracy
@@ -224,7 +282,8 @@ def evaluate_all_domains(model, domain_loaders, device, metrics=None):
     return results
 
 def train_continual_learning(model, domains, data_loaders, replay_buffer, device, 
-                            epochs=3, replay_batch_size=8, learning_rate=5e-5):
+                            epochs=3, replay_batch_size=8, learning_rate=5e-5,
+                            online_ewc=False):
     """
     Train the model sequentially on multiple domains.
     
@@ -237,6 +296,7 @@ def train_continual_learning(model, domains, data_loaders, replay_buffer, device
         epochs: Number of epochs to train on each domain
         replay_batch_size: Batch size for replay samples
         learning_rate: Learning rate for optimizer
+        online_ewc: Whether to use online EWC
         
     Returns:
         metrics: ContinualMetrics object with performance tracking
@@ -267,7 +327,8 @@ def train_continual_learning(model, domains, data_loaders, replay_buffer, device
             device,
             epochs=epochs,
             replay_batch_size=replay_batch_size,
-            learning_rate=learning_rate
+            learning_rate=learning_rate,
+            online_ewc=online_ewc
         )
         
         # Evaluate on all domains seen so far
