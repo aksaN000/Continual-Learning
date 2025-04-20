@@ -4,13 +4,14 @@ import torch.optim as optim
 from tqdm import tqdm
 import numpy as np
 import random
+import time
 from training.replay_buffer import ReplayBuffer
-from training.metrics import ContinualMetrics
+from training.metrics import EnhancedContinualMetrics
 
 def train_on_domain(model, domain_idx, train_loader, val_loader, 
                    replay_buffer, device, epochs=3, 
                    replay_batch_size=8, learning_rate=5e-5, 
-                   online_ewc=False):
+                   online_ewc=False, metrics=None):
     """
     Train the model on a specific domain with experience replay and EWC.
     
@@ -25,10 +26,14 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
         replay_batch_size: Batch size for replay samples
         learning_rate: Learning rate for optimizer
         online_ewc: Whether to use online EWC (more efficient)
+        metrics: Metrics tracker for storing training statistics
         
     Returns:
         val_acc: Validation accuracy on this domain
     """
+    # Record start time
+    start_time = time.time()
+    
     # Set up optimizer with cosine learning rate schedule
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
     
@@ -41,6 +46,11 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
     
     # Loss function
     criterion = nn.CrossEntropyLoss()
+    
+    # Arrays to store learning curve data
+    train_losses = []
+    train_accs = []
+    val_accs = []
     
     # Training loop
     model.train()
@@ -183,29 +193,40 @@ def train_on_domain(model, domain_idx, train_loader, val_loader,
                         importance = 1.5 if preds_correct[i] else 1.0
                         replay_buffer.add_example(input_id, attn_mask, label, domain_idx, importance)
         
+        # Record training statistics
+        train_losses.append(avg_loss)
+        train_accs.append(train_acc / 100)  # Convert percentage to fraction
+        
+        # Evaluate on validation set
+        val_acc = evaluate_on_domain(model, domain_idx, val_loader, device)
+        val_accs.append(val_acc)
+        
         # Print epoch results with loss breakdown
         avg_total_loss = total_loss / len(train_loader)
         avg_ce_loss = total_ce_loss / len(train_loader)
         avg_ewc_loss = total_ewc_loss / len(train_loader)
         avg_replay_loss = total_replay_loss / len(train_loader)
         
-        print(f"Epoch {epoch+1}/{epochs}, Total Loss: {avg_total_loss:.4f}, Accuracy: {train_acc:.2f}%")
+        print(f"Epoch {epoch+1}/{epochs}, Total Loss: {avg_total_loss:.4f}, Train Acc: {train_acc:.2f}%, Val Acc: {val_acc*100:.2f}%")
         print(f"  CE Loss: {avg_ce_loss:.4f}, EWC Loss: {avg_ewc_loss:.4f}, Replay Loss: {avg_replay_loss:.4f}")
     
-    # Validate on this domain
-    val_acc = evaluate_on_domain(model, domain_idx, val_loader, device)
-    print(f"Validation accuracy on domain {domain_idx}: {val_acc:.4f}")
+    # Record training time
+    training_time = time.time() - start_time
     
-    # Update EWC parameters for regularization in future domains
-    if domain_idx < model.num_domains - 1:  # No need to update for the last domain
-        # Pass domain index for online EWC
-        model.update_ewc_params(train_loader, device, domain_idx=domain_idx)
-        
-        # For online EWC, consolidate importance after updating
-        if online_ewc and hasattr(model, 'consolidate_ewc_online') and domain_idx > 0:
-            model.consolidate_ewc_online()
+    # Store learning curves in metrics if provided
+    if metrics is not None and hasattr(metrics, 'learning_curves'):
+        metrics.learning_curves[domain_idx] = {
+            'train_losses': train_losses,
+            'train_accs': train_accs,
+            'val_accs': val_accs,
+            'training_time': training_time
+        }
     
-    return val_acc
+    # Final validation on this domain
+    final_val_acc = evaluate_on_domain(model, domain_idx, val_loader, device)
+    print(f"Final validation accuracy on domain {domain_idx}: {final_val_acc:.4f}")
+    
+    return final_val_acc
 
 def evaluate_on_domain(model, domain_idx, data_loader, device):
     """
@@ -245,7 +266,10 @@ def evaluate_on_domain(model, domain_idx, data_loader, device):
             all_labels.extend(labels.cpu().numpy())
     
     # Compute accuracy
-    accuracy = (np.array(all_preds) == np.array(all_labels)).mean()
+    if all_preds and all_labels:
+        accuracy = (np.array(all_preds) == np.array(all_labels)).mean()
+    else:
+        accuracy = 0.0
     
     return accuracy
 
@@ -272,7 +296,27 @@ def evaluate_all_domains(model, domain_loaders, device, metrics=None):
             
             # Update metrics if provided
             if metrics is not None:
-                metrics.domain_accs[domain_idx].append(acc)
+                # Get predictions and labels for detailed metrics
+                all_preds = []
+                all_labels = []
+                
+                model.eval()
+                with torch.no_grad():
+                    for batch in loader:
+                        input_ids = batch['input_ids'].to(device)
+                        attention_mask = batch['attention_mask'].to(device)
+                        labels = batch['label'].to(device)
+                        
+                        outputs = model(input_ids, attention_mask)
+                        domain_logits = model.get_domain_logits(outputs, domain_idx)
+                        _, preds = torch.max(domain_logits, dim=1)
+                        
+                        all_preds.extend(preds.cpu().numpy())
+                        all_labels.extend(labels.cpu().numpy())
+                
+                # Update metrics with full predictions
+                if all_preds and all_labels:
+                    metrics.update(domain_idx, all_labels, all_preds, model=model)
     
     # Calculate average accuracy
     if results:
@@ -299,16 +343,63 @@ def train_continual_learning(model, domains, data_loaders, replay_buffer, device
         online_ewc: Whether to use online EWC
         
     Returns:
-        metrics: ContinualMetrics object with performance tracking
+        metrics: EnhancedContinualMetrics object with performance tracking
     """
-    # Initialize metrics tracker
-    metrics = ContinualMetrics(len(domains))
+    # Initialize enhanced metrics tracker
+    metrics = EnhancedContinualMetrics(len(domains))
     
     # Store validation loaders for evaluation
     val_loaders = []
     
+    # Compute zero-shot performance for forward transfer calculation
+    print("\nMeasuring zero-shot performance for forward transfer calculation...")
+    zero_shot_accs = []
+    
+    # Set model to eval mode temporarily
+    model.eval()
+    for domain_idx, domain_name in enumerate(domains):
+        _, val_loader = data_loaders[domain_name]
+        
+        with torch.no_grad():
+            all_preds = []
+            all_labels = []
+            
+            for batch in val_loader:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['label'].to(device)
+                
+                # Forward pass
+                outputs = model(input_ids, attention_mask)
+                
+                # Get domain-specific logits
+                domain_logits = model.get_domain_logits(outputs, domain_idx)
+                
+                # Get predictions
+                _, preds = torch.max(domain_logits, dim=1)
+                
+                all_preds.extend(preds.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+            
+            # Compute accuracy
+            if all_preds and all_labels:
+                zero_shot_acc = (np.array(all_preds) == np.array(all_labels)).mean()
+            else:
+                zero_shot_acc = 0.0
+                
+            zero_shot_accs.append(zero_shot_acc)
+            print(f"Zero-shot accuracy on domain {domain_idx}: {zero_shot_acc:.4f}")
+    
+    # Set model back to train mode
+    model.train()
+    
+    # Store zero-shot accuracies for forward transfer calculation
+    metrics.zero_shot_accuracies = zero_shot_accs
+    
     # Train on each domain sequentially
     for domain_idx, domain_name in enumerate(domains):
+        start_time = time.time()
+        
         print(f"\n{'='*50}")
         print(f"Training on domain {domain_idx}: {domain_name}")
         print(f"{'='*50}")
@@ -316,6 +407,10 @@ def train_continual_learning(model, domains, data_loaders, replay_buffer, device
         # Get data loaders for this domain
         train_loader, val_loader = data_loaders[domain_name]
         val_loaders.append(val_loader)
+        
+        # Track EWC computation time
+        ewc_start_time = None
+        ewc_time = 0
         
         # Train on this domain
         train_on_domain(
@@ -328,18 +423,89 @@ def train_continual_learning(model, domains, data_loaders, replay_buffer, device
             epochs=epochs,
             replay_batch_size=replay_batch_size,
             learning_rate=learning_rate,
-            online_ewc=online_ewc
+            online_ewc=online_ewc,
+            metrics=metrics  # Pass metrics for updating during training
         )
+        
+        # Track EWC update time
+        if domain_idx < len(domains) - 1:  # No need for last domain
+            ewc_start_time = time.time()
+            model.update_ewc_params(train_loader, device, domain_idx=domain_idx)
+            ewc_time = time.time() - ewc_start_time
+            
+            # For online EWC, consolidate importance after updating
+            if online_ewc and hasattr(model, 'consolidate_ewc_online'):
+                model.consolidate_ewc_online()
+        
+        # Track timing information
+        training_time = time.time() - start_time
+        timing_info = {
+            'train_time': training_time,
+            'ewc_time': ewc_time
+        }
         
         # Evaluate on all domains seen so far
         print("\nEvaluating on all domains seen so far:")
-        evaluate_all_domains(model, val_loaders, device, metrics)
+        evaluate_domains(model, val_loaders, device, domain_idx, metrics, timing_info)
         
-        # Log metrics
+        # Log and visualize metrics
         metrics.log_metrics(domain_idx)
     
     # Final evaluation
     print("\nFinal evaluation on all domains:")
-    evaluate_all_domains(model, val_loaders, device, metrics)
+    evaluate_domains(model, val_loaders, device, len(domains)-1, metrics, None)
     
+    # Return enhanced metrics
     return metrics
+
+def evaluate_domains(model, val_loaders, device, current_domain_idx, metrics, timing_info=None):
+    """
+    Evaluate model on all domains and update metrics.
+    
+    Args:
+        model: ContinualTextCommandLearner model
+        val_loaders: List of validation DataLoaders
+        device: Device to run evaluation on
+        current_domain_idx: Index of the current domain
+        metrics: EnhancedContinualMetrics object
+        timing_info: Dictionary of timing information
+    """
+    model.eval()
+    
+    for domain_idx, loader in enumerate(val_loaders):
+        if loader is None:
+            continue
+            
+        all_preds = []
+        all_labels = []
+        
+        with torch.no_grad():
+            for batch in loader:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['label'].to(device)
+                
+                # Forward pass
+                outputs = model(input_ids, attention_mask)
+                
+                # Get domain-specific logits
+                domain_logits = model.get_domain_logits(outputs, domain_idx)
+                
+                # Get predictions
+                _, preds = torch.max(domain_logits, dim=1)
+                
+                # Store predictions and labels
+                all_preds.extend(preds.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+        
+        # Update metrics with evaluation results
+        metrics_dict = metrics.update(
+            domain_idx, 
+            all_labels, 
+            all_preds, 
+            model=model, 
+            timing_info=timing_info
+        )
+        
+        # Print domain accuracy
+        print(f"Domain {domain_idx} accuracy: {metrics_dict['accuracy']:.4f}")

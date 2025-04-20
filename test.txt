@@ -1,0 +1,123 @@
+# Detailed Explanation of the Command Sequence
+
+Here's a step-by-step explanation of each command in the sequence and what it accomplishes:
+
+## Step 0: Prepare the dataset
+```bash
+python main.py prepare-data
+```
+**Purpose**: Downloads and prepares the HWU64 dataset for text command understanding.
+
+**What happens**:
+- Downloads the dataset from source repositories
+- Processes the data into train/validation/test splits
+- Organizes data by domain (categories like "smart_home", "entertainment", etc.)
+- Creates necessary directory structure in `data/processed/`
+- Generates a `domains.txt` file listing all available domains
+
+**Output**: Processed dataset files ready for training in `data/processed/` directory.
+
+## Step 1: Run batch experiments
+```bash
+python main.py batch --ewc_values 0 1 10 50 --replay_sizes 0 100 500 1000 --output_dir full_batch_results
+```
+**Purpose**: Runs multiple experiments with different continual learning configurations.
+
+**What happens**:
+- Creates 16 different experiment configurations (4 EWC values × 4 replay buffer sizes)
+- For each configuration:
+  - Initializes a new model
+  - Trains sequentially on all domains
+  - Tracks metrics during training
+  - Evaluates performance after each domain
+  - Saves results and generated visualizations
+
+**Parameters explained**:
+- `--ewc_values 0 1 10 50`: Tests four different EWC lambda values (0 means no EWC)
+- `--replay_sizes 0 100 500 1000`: Tests four different replay buffer sizes (0 means no replay)
+- `--output_dir full_batch_results`: Saves all results in this directory
+
+**Output**: 16 experiment subdirectories in `full_batch_results/`, each containing:
+- `results.json`: Summary metrics
+- `detailed_metrics.json`: Comprehensive metrics
+- `model.pt`: Saved model weights
+- `visualizations/`: Directory with automated visualizations
+
+## Step 2: Generate comprehensive analysis
+```bash
+python main.py analyze --results_dir full_batch_results --output_dir comprehensive_analysis
+```
+**Purpose**: Analyzes all experiment results to identify patterns and the best configuration.
+
+**What happens**:
+- Loads results from all experiments
+- Extracts all metrics for comparison
+- Generates comprehensive visualizations of all metrics
+- Creates summary tables comparing all configurations
+- Computes weighted scores to identify the best configuration
+- Provides detailed explanation of the findings
+
+**Output**: Multiple files in `comprehensive_analysis/` directory:
+- Various `.png` visualization files showing different metrics
+- `metrics_summary.csv` and `metrics_summary.md`: Tabular summaries of all metrics
+- `best_config.json`: Details of the best configuration
+- `best_config_explanation.txt`: Explanatory text about the best configuration
+- `strategy_ranking.png`: Visualization of configuration rankings
+
+## Step 3: Generate focused visualizations
+```bash
+python main.py visualize --results full_batch_results/ewc0_replay0_*/results.json --output_dir baseline_analysis
+python main.py visualize --results full_batch_results/ewc10_replay0_*/results.json --output_dir ewc_only_analysis
+python main.py visualize --results full_batch_results/ewc0_replay500_*/results.json --output_dir replay_only_analysis
+python main.py visualize --results full_batch_results/ewc10_replay500_*/results.json --output_dir combined_analysis
+```
+**Purpose**: Creates detailed visualizations for specific key configurations.
+
+**What happens** for each command:
+- Loads results for a specific configuration (baseline, EWC-only, etc.)
+- Generates standard visualizations focused on that configuration
+- Stores results in separate directories for easy comparison
+
+**Output** for each command: Standard visualizations in respective directories:
+- `accuracy.png`: Accuracy evolution across domains
+- `forgetting.png`: Forgetting measures by domain
+- `backward_transfer.png`: Backward transfer by domain
+
+## Step 4: Generate comparison visualizations
+```bash
+python main.py compare --results_dir full_batch_results --strategies "EWC=0,RP=0" "EWC=10,RP=0" "EWC=0,RP=500" "EWC=10,RP=500" --output_dir strategy_comparison
+```
+**Purpose**: Creates direct side-by-side comparisons of key strategies.
+
+**What happens**:
+- Loads results for the specified strategies
+- Generates comparative visualizations showing multiple strategies on the same charts
+- Focuses on key metrics like accuracy, forgetting, and transfer
+
+**Parameters explained**:
+- `--strategies`: Specifies the labels to use for each strategy in the visualizations
+- These correspond to the experiment directories matching the patterns in Step 3
+
+**Output**: Comparison visualizations in `strategy_comparison/` directory:
+- `basic_comparison.png`: Comparison of basic metrics
+- `transfer_comparison.png`: Comparison of transfer capabilities
+- `comprehensive_comparison.png`: Radar chart showing all metrics
+
+## Step 5 & 6: Examine the results
+```bash
+cat comprehensive_analysis/best_config_explanation.txt
+cat comprehensive_analysis/metrics_summary.md
+```
+**Purpose**: Reviews the key findings to understand which configuration performed best and why.
+
+**What happens**:
+- Displays the explanation of the best configuration
+- Shows the metrics summary table with all results
+
+**Output**: Text displayed in the terminal with detailed analysis of results.
+
+---
+
+This sequence provides a comprehensive evaluation of your continual learning approach. It tests multiple configurations, analyzes all metrics, and identifies which combination of EWC and replay buffer settings provides the best balance of performance, forgetting prevention, and knowledge transfer.
+
+The resulting files contain all the data and visualizations needed for a thorough report that demonstrates the effectiveness of your continual learning techniques in preventing catastrophic forgetting while maintaining the ability to learn new tasks.

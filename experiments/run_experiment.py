@@ -5,6 +5,7 @@ import torch
 import random
 import numpy as np
 from datetime import datetime
+import time
 from transformers import BertTokenizer
 
 # Import configurations
@@ -105,6 +106,10 @@ def run_experiment(config):
     
     Args:
         config: Configuration dictionary
+        
+    Returns:
+        results: Dictionary of results
+        metrics: EnhancedContinualMetrics object
     """
     # Set up experiment
     experiment_name = config['experiment']['name']
@@ -141,9 +146,16 @@ def run_experiment(config):
     model = ContinualTextCommandLearner(num_labels_per_domain, config['model']['base_model'])
     model.to(device)
     
+    # Print model summary
+    print(f"\nModel Architecture:")
+    print(f"  Base Model: {config['model']['base_model']}")
+    print(f"  Total labels: {model.total_labels}")
+    print(f"  Number of parameters: {sum(p.numel() for p in model.parameters())}")
+    
     # Initialize replay buffer
     replay_buffer_size = config['continual']['replay_buffer_size'] if config['experiment']['use_replay'] else 0
-    replay_buffer = ReplayBuffer(capacity=replay_buffer_size)
+    replay_strategy = config['continual'].get('replay_strategy', 'balanced')
+    replay_buffer = ReplayBuffer(capacity=replay_buffer_size, strategy=replay_strategy)
     
     # Calculate appropriate EWC lambda based on experiment settings
     ewc_lambda = 0.0
@@ -178,12 +190,18 @@ def run_experiment(config):
     print(f"  EWC: {'Enabled' if config['experiment']['use_ewc'] else 'Disabled'}")
     if config['experiment']['use_ewc']:
         print(f"  EWC Lambda: {model.ewc_lambda}")
+        print(f"  Online EWC: {'Enabled' if config['experiment'].get('online_ewc', False) else 'Disabled'}")
     print(f"  Replay: {'Enabled' if config['experiment']['use_replay'] else 'Disabled'}")
     if config['experiment']['use_replay']:
         print(f"  Replay Buffer Size: {replay_buffer_size}")
         print(f"  Replay Batch Size: {replay_batch_size}")
+        print(f"  Replay Strategy: {replay_strategy}")
     print(f"  Epochs per domain: {config['training']['epochs']}")
     print(f"  Learning rate: {config['training']['learning_rate']}")
+    print(f"  Weight decay: {config['training'].get('weight_decay', 0.01)}")
+    
+    # Record experiment start time
+    start_time = time.time()
     
     # Run continual learning
     print("\nStarting continual learning training...")
@@ -195,27 +213,49 @@ def run_experiment(config):
         device,
         epochs=config['training']['epochs'],
         replay_batch_size=replay_batch_size,
-        learning_rate=config['training']['learning_rate']
+        learning_rate=config['training']['learning_rate'],
+        online_ewc=config['experiment'].get('online_ewc', False)
     )
+    
+    # Record experiment end time
+    total_time = time.time() - start_time
     
     # Save results
     results = {
         'domains': domains,
         'accuracies': [accs for accs in metrics.domain_accs],
+        'f1_scores': [f1s for f1s in metrics.domain_f1s],
         'forgetting': metrics.compute_forgetting(),
         'backward_transfer': metrics.compute_backward_transfer(),
+        'forward_transfer': metrics.compute_forward_transfer(),
         'final_accuracies': [accs[-1] if accs else 0 for accs in metrics.domain_accs],
-        'avg_accuracy': metrics.compute_avg_accuracy()
+        'avg_accuracy': metrics.compute_avg_accuracy(),
+        'plasticity': metrics.compute_plasticity(),
+        'stability': metrics.compute_stability(),
+        'plasticity_stability_ratio': metrics.compute_plasticity_stability_ratio(),
+        'total_execution_time': total_time,
+        'timestamp': timestamp
     }
     
     with open(os.path.join(experiment_dir, 'results.json'), 'w') as f:
         json.dump(results, f, indent=2)
     
+    # Save detailed metrics
+    metrics.save_metrics(os.path.join(experiment_dir, 'detailed_metrics.json'))
+    
+    # Generate visualizations
+    vis_dir = os.path.join(experiment_dir, 'visualizations')
+    os.makedirs(vis_dir, exist_ok=True)
+    metrics.visualize_metrics(domains, vis_dir)
+    
     # Save model if specified
     if config['output']['save_model']:
-        torch.save(model.state_dict(), os.path.join(experiment_dir, 'model.pt'))
+        model_save_path = os.path.join(experiment_dir, 'model.pt')
+        torch.save(model.state_dict(), model_save_path)
+        print(f"Model saved to {model_save_path}")
     
-    print(f"\nExperiment completed. Results saved to {experiment_dir}")
+    print(f"\nExperiment completed in {total_time:.2f} seconds.")
+    print(f"Results saved to {experiment_dir}")
     
     return results, metrics
 
@@ -225,15 +265,20 @@ def parse_args():
     parser.add_argument('--config', type=str, default=None, help='Path to config file')
     parser.add_argument('--replay_buffer_size', type=int, default=None, help='Replay buffer capacity')
     parser.add_argument('--replay_batch_size', type=int, default=None, help='Replay batch size')
+    parser.add_argument('--replay_strategy', type=str, default=None, choices=['balanced', 'importance', 'diversity'], 
+                        help='Replay buffer sampling strategy')
     parser.add_argument('--ewc_lambda', type=float, default=None, help='EWC regularization strength')
     parser.add_argument('--use_ewc', action='store_true', help='Use EWC regularization')
     parser.add_argument('--no_ewc', action='store_true', help='Disable EWC regularization')
+    parser.add_argument('--online_ewc', action='store_true', help='Use online EWC (more efficient)')
     parser.add_argument('--use_replay', action='store_true', help='Use experience replay')
     parser.add_argument('--no_replay', action='store_true', help='Disable experience replay')
     parser.add_argument('--epochs', type=int, default=None, help='Epochs per domain')
     parser.add_argument('--learning_rate', type=float, default=None, help='Learning rate')
+    parser.add_argument('--weight_decay', type=float, default=None, help='Weight decay for optimizer')
     parser.add_argument('--seed', type=int, default=None, help='Random seed')
     parser.add_argument('--name', type=str, default=None, help='Experiment name')
+    parser.add_argument('--no_save_model', action='store_true', help='Do not save model checkpoint')
     
     return parser.parse_args()
 
@@ -249,19 +294,28 @@ def main():
     if args.config:
         with open(args.config, 'r') as f:
             file_config = json.load(f)
-            config.update(file_config)
+            # Deep merge the configurations
+            for key, value in file_config.items():
+                if key in config and isinstance(config[key], dict) and isinstance(value, dict):
+                    config[key].update(value)
+                else:
+                    config[key] = value
     
     # Override with command line arguments
     if args.replay_buffer_size is not None:
         config['continual']['replay_buffer_size'] = args.replay_buffer_size
     if args.replay_batch_size is not None:
         config['continual']['replay_batch_size'] = args.replay_batch_size
+    if args.replay_strategy is not None:
+        config['continual']['replay_strategy'] = args.replay_strategy
     if args.ewc_lambda is not None:
         config['continual']['ewc_lambda'] = args.ewc_lambda
     if args.use_ewc:
         config['experiment']['use_ewc'] = True
     if args.no_ewc:
         config['experiment']['use_ewc'] = False
+    if args.online_ewc:
+        config['experiment']['online_ewc'] = True
     if args.use_replay:
         config['experiment']['use_replay'] = True
     if args.no_replay:
@@ -270,10 +324,14 @@ def main():
         config['training']['epochs'] = args.epochs
     if args.learning_rate is not None:
         config['training']['learning_rate'] = args.learning_rate
+    if args.weight_decay is not None:
+        config['training']['weight_decay'] = args.weight_decay
     if args.seed is not None:
         config['experiment']['seed'] = args.seed
     if args.name is not None:
         config['experiment']['name'] = args.name
+    if args.no_save_model:
+        config['output']['save_model'] = False
     
     # Create results directory if it doesn't exist
     os.makedirs(config['output']['save_dir'], exist_ok=True)

@@ -6,6 +6,8 @@ This script serves as the entry point for the entire pipeline.
 import argparse
 import os
 import glob
+import enhanced_visualization
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -53,6 +55,11 @@ def parse_args():
                              help='Base configuration file')
     batch_parser.add_argument('--output_dir', type=str, default='batch_results', 
                              help='Directory to save results')
+    
+    # Comprehensive analysis command
+    analyze_parser = subparsers.add_parser('analyze', help='Generate comprehensive analysis of all metrics')
+    analyze_parser.add_argument('--results_dir', type=str, required=True, help='Directory containing experiment results')
+    analyze_parser.add_argument('--output_dir', type=str, default='comprehensive_analysis', help='Directory to save visualizations')
     
     return parser.parse_args()
 
@@ -103,7 +110,7 @@ def run_experiment(args):
 
 def compare_strategies(args):
     """Compare different continual learning strategies."""
-    from visualization.plot_results import compare_strategies
+    from visualization.plot_results import plot_enhanced_comparison
     import glob
     
     results_files = glob.glob(os.path.join(args.results_dir, '**/results.json'), recursive=True)
@@ -112,7 +119,14 @@ def compare_strategies(args):
         print(f"No results files found in {args.results_dir}")
         return
     
-    compare_strategies(results_files, args.strategies, args.output_dir)
+    # Extract strategy names from directory names if not provided
+    strategies = args.strategies
+    if not strategies:
+        strategies = [os.path.basename(os.path.dirname(file_path)) for file_path in results_files]
+    
+    # Use enhanced comparison
+    plot_enhanced_comparison(results_files, strategies, args.output_dir)
+    print(f"Enhanced comparison visualizations saved to {args.output_dir}")
 
 def visualize_results(args):
     """Visualize experiment results."""
@@ -194,9 +208,21 @@ def run_batch_experiments(args):
             os.path.join(args.output_dir, 'comparison')
         )
 
+def run_comprehensive_analysis(args):
+    """Run comprehensive analysis on experiment results."""
+    from enhanced_visualization import create_comprehensive_report
+    create_comprehensive_report(args.results_dir, args.output_dir)
+    print(f"Comprehensive analysis completed. Results saved to {args.output_dir}")
+
 def main():
     """Main entry point."""
     args = parse_args()
+    
+    # For any command other than prepare-data, first check if data exists
+    if args.command != 'prepare-data':
+        if not os.path.exists('data/processed') or not os.listdir('data/processed'):
+            print("Dataset not found. Running data preparation first...")
+            run_data_preparation()
     
     if args.command == 'prepare-data':
         run_data_preparation()
@@ -208,6 +234,8 @@ def main():
         visualize_results(args)
     elif args.command == 'batch':
         run_batch_experiments(args)
+    elif args.command == 'analyze':
+        run_comprehensive_analysis(args)
     else:
         print("Please specify a command. Use --help for more information.")
 

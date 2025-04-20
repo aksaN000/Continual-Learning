@@ -1,0 +1,45 @@
+BEST CONFIGURATION ANALYSIS
+==========================
+
+Best Strategy: EWC=0.0,RP=1000 (Score: 3.16)
+
+Metric Weights Used:
+  Performance: avg_accuracy: 1.0
+  Performance: avg_f1_score: 0.8
+  Forgetting: avg_forgetting: -1.0
+  Forgetting: max_forgetting: -0.7
+  Forgetting: catastrophic_forgetting_events: -0.9
+  Transfer: avg_backward_transfer: 0.6
+  Transfer: avg_forward_transfer: 0.6
+  Plasticity-Stability: plasticity: 0.8
+  Plasticity-Stability: stability: 0.8
+  Plasticity-Stability: plasticity_stability_ratio: 0.5
+  Resource: buffer_utilization: 0.3
+  Resource: ewc_overhead_ratio: -0.3
+
+All Strategy Scores (ranked):
+  EWC=0.0,RP=1000: 3.16
+  EWC=0.0,RP=0: 3.16
+  EWC=50.0,RP=500: 3.15
+  EWC=10.0,RP=500: 3.15
+  EWC=1.0,RP=500: 3.15
+  EWC=50.0,RP=0: 3.15
+  EWC=10.0,RP=0: 3.15
+  EWC=1.0,RP=0: 3.15
+  EWC=0.0,RP=100: 3.13
+  EWC=10.0,RP=1000: 3.12
+  EWC=50.0,RP=100: 3.11
+  EWC=1.0,RP=1000: 3.11
+  EWC=1.0,RP=100: 3.11
+  EWC=50.0,RP=1000: 3.10
+  EWC=10.0,RP=100: 3.09
+  EWC=0.0,RP=500: 3.07
+
+Analysis:
+The weighted scoring system balances performance metrics (accuracy, F1 score),
+forgetting resistance (average and maximum forgetting, catastrophic events),
+transfer learning capabilities (backward and forward transfer),
+plasticity-stability trade-off, and resource efficiency.
+
+The best configuration achieves the optimal balance across these dimensions,
+with particular emphasis on maintaining high accuracy while minimizing forgetting.
