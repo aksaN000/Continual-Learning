@@ -323,8 +323,8 @@ def plot_transfer_metrics(all_data, strategies, output_dir):
     plt.xticks(x, strategies, rotation=45, ha='right')
     plt.axhline(y=0, color='black', linestyle='-', alpha=0.3)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.legend(loc='upper right')
-    plt.tight_layout()
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=10)
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
     
     plt.savefig(os.path.join(output_dir, 'transfer_metrics.png'), dpi=300, bbox_inches='tight')
     plt.close()
@@ -365,7 +365,7 @@ def plot_plasticity_stability_metrics(all_data, strategies, output_dir):
             ps_ratio.append(0)
     
     # Create the plot
-    plt.figure(figsize=(14, 8))
+    plt.figure(figsize=(18, 8))
     x = np.arange(len(strategies))
     width = 0.25
     
@@ -394,8 +394,8 @@ def plot_plasticity_stability_metrics(all_data, strategies, output_dir):
     plt.xticks(x, strategies, rotation=45, ha='right')
     plt.axhline(y=1.0, color='black', linestyle='--', alpha=0.5, label='Perfect Balance')
     plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.legend(loc='upper right')
-    plt.tight_layout()
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=10)
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
     
     plt.savefig(os.path.join(output_dir, 'plasticity_stability_metrics.png'), dpi=300, bbox_inches='tight')
     plt.close()
@@ -468,8 +468,8 @@ def plot_resource_metrics(all_data, strategies, output_dir):
     plt.title('Resource Utilization Comparison', fontsize=16, fontweight='bold')
     plt.xticks(x, strategies, rotation=45, ha='right')
     plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.legend(loc='upper right')
-    plt.tight_layout()
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=10)
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
     
     plt.savefig(os.path.join(output_dir, 'resource_metrics.png'), dpi=300, bbox_inches='tight')
     plt.close()
@@ -511,7 +511,7 @@ def plot_domain_performance(all_data, strategies, output_dir):
                 domain_accuracies[domain].append(0)
     
     # Create the plot
-    plt.figure(figsize=(16, 10))
+    plt.figure(figsize=(20, 10))
     
     # Set up bar positions
     num_domains = len(all_domains)
@@ -532,9 +532,9 @@ def plot_domain_performance(all_data, strategies, output_dir):
     plt.ylabel('Final Accuracy', fontsize=12, fontweight='bold')
     plt.title('Final Accuracy Across Domains', fontsize=16, fontweight='bold')
     plt.xticks(np.arange(num_domains), all_domains, rotation=45, ha='right')
-    plt.legend(loc='upper right')
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=10)
     plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 0.85, 1]) 
     
     plt.savefig(os.path.join(output_dir, 'domain_performance.png'), dpi=300, bbox_inches='tight')
     plt.close()
