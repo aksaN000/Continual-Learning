@@ -278,13 +278,16 @@ Released under the MIT License. See `LICENSE` if present, otherwise the standard
 
 ## Citation
 
-If you use this code, please cite as:
+If you use this code or build on these results, please cite the paper:
 
 ```bibtex
-@misc{continual_learning_text_commands,
-  title  = {Continual Learning for Text Command Understanding},
-  author = {aksaN000},
-  year   = {2025},
+@misc{alif2025continual,
+  title        = {Continual Learning for Text Command Classification Using {EWC} and Experience Replay},
+  author       = {Alif, Aksan Gony and Islam, Nowmi},
+  year         = {2025},
+  note         = {Department of Computer Science and Engineering, BRAC University},
   howpublished = {\url{https://github.com/aksaN000/Continual-Learning}}
 }
 ```
+
+GitHub's **Cite this repository** button (from [`CITATION.cff`](CITATION.cff)) also generates APA and BibTeX for it.

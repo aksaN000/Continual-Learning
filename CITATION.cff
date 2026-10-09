@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this code or build on these results, please cite the paper below."
+title: "Continual Learning for Text Command Classification"
+type: software
+authors:
+  - family-names: Alif
+    given-names: Aksan Gony
+    affiliation: BRAC University
+  - family-names: Islam
+    given-names: Nowmi
+    affiliation: BRAC University
+repository-code: "https://github.com/aksaN000/Continual-Learning"
+keywords:
+  - continual learning
+  - catastrophic forgetting
+  - elastic weight consolidation
+  - experience replay
+  - BERT
+preferred-citation:
+  type: report
+  title: "Continual Learning for Text Command Classification Using EWC and Experience Replay"
+  authors:
+    - family-names: Alif
+      given-names: Aksan Gony
+    - family-names: Islam
+      given-names: Nowmi
+  institution:
+    name: "BRAC University"
+  department: "Department of Computer Science and Engineering"
+  year: 2025
+  url: "https://github.com/aksaN000/Continual-Learning/blob/main/paper.pdf"
