@@ -20,10 +20,10 @@ A PyTorch reference implementation comparing **Experience Replay** and **Elastic
 
 ## Background
 
-Neural networks trained on a stream of tasks tend to overwrite parameters that were important for earlier tasks — a phenomenon called *catastrophic forgetting*. Two of the most influential mitigation strategies are:
+Neural networks trained on a stream of tasks tend to overwrite parameters that were important for earlier tasks, a phenomenon called *catastrophic forgetting*. Two of the most influential mitigation strategies are:
 
-- **Elastic Weight Consolidation (EWC)** — Kirkpatrick et al., 2017. Adds a quadratic penalty that pulls weights back toward values that were important (high Fisher information) for prior tasks.
-- **Experience Replay** — keeps a small buffer of examples from previous tasks and interleaves them with the current task's mini-batches.
+- **Elastic Weight Consolidation (EWC)**, from Kirkpatrick et al. (2017), adds a quadratic penalty that pulls weights back toward values that were important (high Fisher information) for prior tasks.
+- **Experience Replay** keeps a small buffer of examples from previous tasks and interleaves them with the current task's mini-batches.
 
 This project implements both, evaluates them in isolation and in combination on a realistic conversational-NLU benchmark, and reports the practical trade-offs.
 
@@ -49,18 +49,18 @@ The repository ships with a completed 4 × 4 sweep over EWC λ ∈ {0, 1, 10, 50
 | 4 | 50 | 0    | 0.8260     | 0.8063 | 0.0 | 0.251 | 0 |
 | 5 | 10 | 0    | 0.8255     | 0.8058 | 0.0 | 0.254 | 0 |
 
-**Selected by the weighted composite score** (balancing accuracy, forgetting, transfer, plasticity/stability, and resource cost — see [comprehensive_analysis/best_config_explanation.txt](comprehensive_analysis/best_config_explanation.txt)):
+**Selected by the weighted composite score** (balancing accuracy, forgetting, transfer, plasticity/stability, and resource cost; see [comprehensive_analysis/best_config_explanation.txt](comprehensive_analysis/best_config_explanation.txt)):
 
 - **Tied at 3.16:** `EWC=0, replay=1000` and `EWC=0, replay=0`
 - **Tied at 3.15:** all four `replay=500` configurations and the three pure-EWC configurations
 
 Practical takeaways from the sweep:
 
-1. **A 500-example replay buffer + non-trivial EWC λ gives the best raw accuracy** (~83%), regardless of whether λ is 1, 10, or 50 — the accuracy ceiling is largely set by replay, with EWC strength being secondary.
+1. **A 500-example replay buffer + non-trivial EWC λ gives the best raw accuracy** (~83%), regardless of whether λ is 1, 10, or 50: the accuracy ceiling is largely set by replay, with EWC strength being secondary.
 2. **Pure EWC (no replay) avoids catastrophic-forgetting events entirely** at the cost of ~0.2 absolute accuracy points versus the best combined configuration.
-3. **Maximum forgetting is bounded around 0.25–0.32 across all configurations**, including the baseline — BERT's pre-trained representations naturally limit how badly the model can collapse on prior domains.
+3. **Maximum forgetting is bounded around 0.25–0.32 across all configurations**, including the baseline: BERT's pre-trained representations naturally limit how badly the model can collapse on prior domains.
 4. **More replay does not strictly help.** The 1000-example buffer is essentially tied with the 500-example buffer; the 100-example buffer is the worst replay setting on accuracy.
-5. **EWC overhead is modest** — the ewc_overhead_ratio column shows fewer than 13% additional ops for the heaviest EWC setting.
+5. **EWC overhead is modest:** the ewc_overhead_ratio column shows fewer than 13% additional ops for the heaviest EWC setting.
 
 Full visualisations (radar comparison, plasticity/stability scatter, forgetting curves, per-strategy resource bars) are pre-generated under [comprehensive_analysis/](comprehensive_analysis/).
 
@@ -134,7 +134,7 @@ This downloads HWU64 from [xliuhw/NLU-Evaluation-Data](https://github.com/xliuhw
 
 | Command | Purpose | Key flags |
 | --- | --- | --- |
-| `prepare-data` | Download and process HWU64 | — |
+| `prepare-data` | Download and process HWU64 | none |
 | `run-experiment` | Run a single sequential training pass | `--name`, `--use_ewc` / `--no_ewc`, `--use_replay` / `--no_replay`, `--ewc_lambda`, `--replay_buffer_size`, `--replay_batch_size`, `--epochs`, `--learning_rate`, `--seed`, `--config` |
 | `batch` | Run a full grid of EWC λ × replay-size configurations | `--ewc_values 0 1 10 50`, `--replay_sizes 0 100 500 1000`, `--base_config`, `--output_dir` |
 | `visualize` | Render plots for a single results JSON | `--results`, `--output_dir` |
@@ -231,9 +231,9 @@ For more involved sweeps, copy `experiments/configs/default_config.py` and pass 
 
 Replay sampling strategy can be switched via the `continual.replay_strategy` key:
 
-- `balanced` — equal samples per stored domain (default)
-- `importance` — bias toward examples the model previously got wrong
-- `diversity` — bias toward examples with high embedding-space spread
+- `balanced`: equal samples per stored domain (default)
+- `importance`: bias toward examples the model previously got wrong
+- `diversity`: bias toward examples with high embedding-space spread
 
 ## Reproducing the Headline Numbers
 
@@ -253,13 +253,13 @@ python main.py visualize --results full_batch_results/ewc10.0_replay500_<timesta
 
 ## Extending the Project
 
-Natural directions for further work — many of these are noted in [future_expansions](future_expansions):
+Natural directions for further work, many of them noted in [future_expansions](future_expansions):
 
 - **More CL methods:** generative replay, Learning without Forgetting (LwF), Progressive Neural Networks, dynamic architecture expansion.
 - **Alternative backbones:** swap `bert-base-uncased` for `roberta-base`, `distilbert-base-uncased`, or `albert-base-v2` in `models/base_model.py`.
 - **Smarter replay:** importance-weighted, gradient-similarity, or coreset-based example selection.
 - **Harder domain sequences:** randomise or adversarially order the HWU64 scenarios to widen the forgetting gap and make the comparison more discriminating.
-- **Statistical testing:** add paired bootstrap or Wilcoxon tests over multiple seeds — the current sweep is single-seed.
+- **Statistical testing:** add paired bootstrap or Wilcoxon tests over multiple seeds, since the current sweep is single-seed.
 
 ## References
 
