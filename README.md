@@ -2,6 +2,8 @@
 
 A PyTorch reference implementation comparing **Experience Replay** and **Elastic Weight Consolidation (EWC)** for mitigating catastrophic forgetting when a BERT-based intent classifier is trained sequentially across the domains of the HWU64 conversational dataset. The repository ships with a 16-configuration sweep over EWC strength and replay buffer size, plus the analysis pipeline that turns those runs into publication-grade plots and metrics.
 
+**Paper:** [Continual Learning for Text Command Classification Using EWC and Experience Replay](paper.pdf) (Aksan Gony Alif, Nowmi Islam; BRAC University).
+
 ## Table of Contents
 
 - [Background](#background)
